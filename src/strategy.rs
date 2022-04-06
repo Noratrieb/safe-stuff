@@ -1,13 +1,13 @@
 use core::marker::PhantomData;
 
-use stuff::Backend;
+use crate::ptr::PtrStuffingStrategy;
 
 pub trait SafeStuffingStrategy<B> {
-    type Extra;
+    type Other;
 
-    fn stuff_extra(extra: &Self::Extra) -> B;
+    fn stuff_other(extra: &Self::Other) -> B;
 
-    fn extract_extra(addr: B) -> Option<Self::Extra>;
+    fn extract_other(addr: B) -> Option<Self::Other>;
 }
 
 /// An internal type to convert from the safe to the unsafe trait
@@ -19,28 +19,30 @@ pub(crate) struct SafeStrategyAdaptor<S>(PhantomData<S>);
 unsafe impl<S, B> stuff::StuffingStrategy<B> for SafeStrategyAdaptor<S>
 where
     S: SafeStuffingStrategy<B>,
+    B: TryInto<usize>,
+    usize: TryInto<B>,
 {
-    type Extra = S::Extra;
+    type Other = S::Other;
 
-    fn is_extra(data: B) -> bool {
-        S::extract_extra(data).is_some()
+    fn is_other(data: B) -> bool {
+        S::extract_other(data).is_some()
     }
 
-    fn stuff_extra(inner: Self::Extra) -> B {
-        let b = S::stuff_extra(&inner);
+    fn stuff_other(inner: Self::Other) -> B {
+        let b = S::stuff_other(&inner);
         core::mem::forget(inner);
         b
     }
 
-    unsafe fn extract_extra(data: B) -> Self::Extra {
-        S::extract_extra(data).unwrap()
+    unsafe fn extract_other(data: B) -> Self::Other {
+        S::extract_other(data).unwrap()
     }
 
     fn stuff_ptr(addr: usize) -> B {
-        addr
+        addr.try_into().unwrap_or_else(|_| panic!())
     }
 
     fn extract_ptr(inner: B) -> usize {
-        inner
+        inner.try_into().unwrap_or_else(|_| panic!())
     }
 }
